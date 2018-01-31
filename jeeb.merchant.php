@@ -47,43 +47,18 @@ function debug_log($contents)
     }
 }
 
-function create_jeeb_table()
-{
-    // Access to Wordpress Database
-    global $wpdb;
-
-    // Query for creating Keys Table
-    $sql = "CREATE TABLE IF NOT EXISTS `" . $wpdb->prefix . "jeeb_keys` (
-       `id` int(11) not null auto_increment,
-       `orderid` varchar(1000) not NULL,
-       `sessionid` varchar(1000) not null,
-       `token` varchar(250) not null,
-       PRIMARY KEY (`id`)
-       ) ENGINE=InnoDB DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;";
-
-    try {
-        // execute SQL statement
-        dbDelta($sql);
-
-    } catch (\Exception $e) {
-        error_log('[Error] In jeeb plugin, create_table() function on line ' . $e->getLine() . ', with the error "' . $e->getMessage() . '" .');
-        throw $e;
-    }
-}
-
 function form_jeeb()
 {
     // Access to Wordpress Database
     global $wpdb;
+
+    $output = NULL;
 
     try {
         if (get_option('jeeb_error') != null) {
             $output = '<div style="color:#A94442;background-color:#F2DEDE;background-color:#EBCCD1;text-align:center;padding:15px;border:1px solid transparent;border-radius:4px">'.get_option('jeeb_error').'</div>';
             update_option('jeeb_error', null);
         }
-
-        // Create table for jeeb Storage
-        create_jeeb_table();
 
         // Get Current user's ids
         $user_id = get_current_user_id();
@@ -97,23 +72,68 @@ function form_jeeb()
 
         $rows = array();
 
+        $test = $live = "";
+        get_option("network") == "Testnet" ? $test = "selected" : $live = "selected" ;
         $rows[] = array(
             'Live/Test',
-            '<select name="network"><option value="Livenet">Live</option><option value="Testnet">Test</option></select>',
+            '<select name="network"><option value="Livenet" '. $live .'>Live</option><option value="Testnet" '.$test.'>Test</option></select>',
             '<p class="description">Testnet is used for Testing and Debugging purposes.</p>',
         );
 
+        $signature = get_option("signature");
         $rows[] = array(
             'Signature',
-            '<input name="signature" type="text" value="" placeholder="Enter your signature"/>',
+            '<input name="signature" type="text" value="'.$signature.'" placeholder="Enter your signature"/>',
             '<p class="description">Signature is a unique string provided by Jeeb to the merchant.</p>',
         );
 
-        // Allows the merchant to specify a URL to redirect to upon the customer completing payment on the jeeb.com
+        $btc = $eur = $irr = $usd = "";
+        get_option("basecoin") == "btc" ? $btc = "selected" : $btc = "" ;
+        get_option("basecoin") == "eur" ? $eur = "selected" : $eur = "" ;
+        get_option("basecoin") == "irr" ? $irr = "selected" : $irr = "" ;
+        get_option("basecoin") == "usd" ? $usd = "selected" : $usd = "" ;
+        $rows[] = array(
+            'Basecoin',
+            '<select name="basecoin"><option value="btc" '.$btc.'>BTC</option><option value="eur" '.$eur.'>EUR</option><option value="irr" '.$irr.'>IRR</option><option value="usd" '.$usd.'>USD</option></select>',
+            '<p class="description">The base currency of your website.</p>',
+        );
+
+        $btc = $eth = $xrp = $xmr = $bch = $ltc = $test_btc = "";
+        get_option("btc") == "btc" ? $btc = "checked" : $btc = "";
+        get_option("eth") == "eth" ? $eth = "checked" : $eth = "";
+        get_option("xrp") == "xrp" ? $xrp = "checked" : $xrp = "";
+        get_option("xmr") == "xmr" ? $xmr = "checked" : $xmr = "";
+        get_option("bch") == "bch" ? $bch = "checked" : $bch = "";
+        get_option("ltc") == "ltc" ? $ltc = "checked" : $ltc = "";
+        get_option("test-btc") == "test-btc" ? $test_btc = "checked" : $test_btc = "";
+        $rows[] = array(
+            'Targetcoin',
+            '<input type="checkbox" name="btc" value="btc" '.$btc.'>BTC<br>
+            <input type="checkbox" name="eth" value="eth" '.$eth.'>ETH<br>
+            <input type="checkbox" name="xrp" value="xrp" '.$xrp.'>XRP<br>
+            <input type="checkbox" name="xmr" value="xmr" '.$xmr.'>XMR<br>
+            <input type="checkbox" name="bch" value="bch" '.$bch.'>BCH<br>
+            <input type="checkbox" name="ltc" value="ltc" '.$ltc.'>LTC<br>
+            <input type="checkbox" name="test-btc" value="test-btc" '.$test_btc.'>TEST-BTC<br>',
+            '<p class="description">The target currency to which your base currency will get converted.</p>',
+            );
+
+        $auto_select = $eng = $persian = "";
+        get_option("lang") == "none" ? $auto_select = "selected" : $auto_select = "" ;
+        get_option("lang") == "en" ? $eng = "selected" : $eng = "" ;
+        get_option("lang") == "fa" ? $persian = "selected" : $persian = "" ;
+        $rows[] = array(
+            'Language',
+            '<select name="lang"><option value="none" '.$auto_select.'>Auto-Select</option><option value="en" '.$eng.'>English</option><option value="fa" '.$persian.'>Persian</option></select>',
+            '<p class="description">Set the language of the payment portal.</p>',
+        );
+
+        $jeeb_redirect = get_option("jeeb_redirect");
+        // Allows the merchant to specify a URL to redirect to upon the customer completing payment on the jeeb.io
         // invoice page. This is typcially the "Transaction Results" page.
         $rows[] = array(
                         'Redirect URL',
-                        '<input name="jeeb_redirect" type="text" value="" />',
+                        '<input name="jeeb_redirect" type="text" value="'.$jeeb_redirect.'" />',
                         '<p class="description"><strong>Important!</strong> Put the URL that you want the buyer to be redirected to after payment. This is usually a "Thanks for your order!" page.</p>',
                        );
 
@@ -156,14 +176,33 @@ function submit_jeeb()
                             'signature',
                             'network',
                             'jeeb_redirect',
+                            'basecoin',
+                            'btc',
+                            'xrp',
+                            'xmr',
+                            'ltc',
+                            'bch',
+                            'eth',
+                            'test-btc',
+                            'lang'
                            );
 
             foreach ($params as $p) {
-                if ($_POST[$p] != null) {
+                if($_POST[$p]){
+                  if ($_POST[$p] != null) {
                     update_option($p, $_POST[$p]);
-                } else {
-                    add_settings_error($p, 'error', __('The setting '. $p.' cannot be blank! Please enter a value for this field', 'wpse'), 'error');
+                    debug_log($_POST[$p]);
+                  }
+                  else {
+                    if($p!='btc'&&$p!='xrp'&&$p!='xmr'&&$p!='ltc'&&$p!='bch'&&$p!='eth'&&$p!='test-btc'){
+                      add_settings_error($p, 'error', __('The setting '. $p.' cannot be blank! Please enter a value for this field', 'wpse'), 'error');
+                  }
                 }
+              }
+              else{
+                update_option($p, NULL);
+                debug_log(get_option($p));
+              }
             }
         }
 
@@ -175,10 +214,10 @@ function submit_jeeb()
     }
 }
 
-function convertIrrToBtc($url, $amount, $signature) {
-
-    // return Jeeb::convert_irr_to_btc($url, $amount, $signature);
-    $ch = curl_init($url.'api/convert/'.$signature.'/'.$amount.'/irr/btc');
+function convertBaseToTarget($url, $amount, $signature, $baseCur) {
+    debug_log("Entered into Convert Base To Target");
+    debug_log($url.'currency?'.$signature.'&value='.$amount.'&base='.$baseCur.'&target=btc');
+    $ch = curl_init($url.'currency?'.$signature.'&value='.$amount.'&base='.$baseCur.'&target=btc');
     curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "GET");
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, array(
@@ -187,7 +226,7 @@ function convertIrrToBtc($url, $amount, $signature) {
 
   $result = curl_exec($ch);
   $data = json_decode( $result , true);
-  error_log('data = '.$data["result"]);
+  debug_log('Response =>'. var_export($data, TRUE));
   // Return the equivalent bitcoin value acquired from Jeeb server.
   return (float) $data["result"];
 
@@ -195,10 +234,10 @@ function convertIrrToBtc($url, $amount, $signature) {
 
 
   function createInvoice($url, $amount, $options = array(), $signature) {
-
+      debug_log("Entered into Create Invoice");
       $post = json_encode($options);
 
-      $ch = curl_init($url.'api/bitcoin/issue/'.$signature);
+      $ch = curl_init($url.'payments/' . $signature . '/issue/');
       curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
       curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
       curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -209,7 +248,7 @@ function convertIrrToBtc($url, $amount, $signature) {
 
       $result = curl_exec($ch);
       $data = json_decode( $result , true);
-      error_log('data = '.$data['result']['token']);
+      debug_log('Response =>'. var_export($data, TRUE));
 
       return $data['result']['token'];
 
@@ -218,7 +257,7 @@ function convertIrrToBtc($url, $amount, $signature) {
   function redirectPayment($url, $token) {
     debug_log("Entered into auto submit-form");
     // Using Auto-submit form to redirect user with the token
-    echo "<form id='form' method='post' action='".$url."invoice/payment'>".
+    echo "<form id='form' method='post' action='".$url."payments/invoice'>".
             "<input type='hidden' autocomplete='off' name='token' value='".$token."'/>".
            "</form>".
            "<script type='text/javascript'>".
@@ -251,36 +290,44 @@ function gateway_jeeb($seperator, $sessionid)
             update_option('jeeb_redirect', get_site_url());
         }
 
-        $baseUri = get_option('network')=="Testnet" ? "http://test.jeeb.io:9876/" : "https://jeeb.io/" ;
-        $signature = get_option('signature'); // Signature
-        $callBack = get_option('jeeb_redirect'); // Callback Url
+        $baseUri      = "https://core.jeeb.io/api/" ;
+        $baseCur      = get_option('basecoin');
+        $signature    = get_option('signature'); // Signature
+        $callBack     = get_option('jeeb_redirect'); // Callback Url
         $notification = get_option('siteurl').'/?jeeb_callback=true';  // Notification Url
-        $order_total = $price;  // Total price in irr
+        $order_total  = $price;  // Total price in irr
+        $params = array(
+                        'btc',
+                        'xrp',
+                        'xmr',
+                        'ltc',
+                        'bch',
+                        'eth',
+                        'test-btc'
+                       );
 
-        debug_log(" ".$baseUri." ".$signature." ".$callBack." ".$notification);
-        debug_log("Cost = ". $price);
+        foreach ($params as $p) {
+          get_option($p) != NULL ? $target_cur .= get_option($p) . "/" : get_option($p) ;
+        }
 
-        $btc = convertIrrToBtc($baseUri, $order_total, $signature);
+        debug_log("Session Id => " . $sessionid . " " . $purchase_log['id']);
+
+        $amount = convertBaseToTarget($baseUri, $order_total, $signature, $baseCur);
 
         $params = array(
-          'orderNo'          => $purchase_log['id'],
-          'requestAmount'    => (float) $btc,
-          'notificationUrl'  => $notification,
-          'callBackUrl'       => $callBack,
-          'allowReject'      => get_option('jeeb_redirect')=="Testnet" ? false : true
+          'orderNo'      => $purchase_log['id'],
+          'value'        => (float) $amount,
+          'webhookUrl'   => $notification,
+          'callBackUrl'  => $callBack,
+          'allowReject'  => get_option("network") == "Testnet" ? false : true,
+          "coins"        => $target_cur,
+          "allowTestNet" => get_option("network") == "Testnet" ? true : false,
+          "language"     => get_option("lang") == "none" ? NUll : get_option("lang")
         );
 
-        $token = createInvoice($baseUri, $btc, $params, $signature);
+        debug_log("Requesting with Params => " . json_encode($params));
 
-        $table_name = $wpdb->prefix.'jeeb_keys';
-
-        $data = array(
-            'orderid' => $purchase_log['id'],
-            'sessionid' => $sessionid,
-            'token'  => $token
-        );
-
-        $wpdb->insert($table_name, $data);
+        $token = createInvoice($baseUri, $amount, $params, $signature);
 
         redirectPayment($baseUri, $token);
 
@@ -298,73 +345,44 @@ function jeeb_callback()
       $postdata = file_get_contents("php://input");
       $json = json_decode($postdata, true);
 
-      if($json['orderNo']){
-        debug_log("hey".$json['orderNo']);
+      if($json['signature'] == get_option("signature")){
+        debug_log("Entered into Notification");
+        debug_log("Response =>". var_export($json, TRUE));
       $table_name = $wpdb->prefix.'jeeb_keys';
 
       $orderNo = $json['orderNo'];
 
-      $row = $wpdb->get_results("SELECT * FROM {$table_name} WHERE `orderid` = {$orderNo}", ARRAY_A);
-      debug_log("hello".print_r($row, TRUE) );
-      debug_log("Session ID : ".$row[0]['sessionid']);
-
-      $purchase_log = $wpdb->get_row("SELECT * FROM `" .WPSC_TABLE_PURCHASE_LOGS. "` WHERE `sessionid`= " . $row[0]['sessionid']. " LIMIT 1", ARRAY_A);
-
-      $email_form_field = $wpdb->get_var("SELECT `id` FROM `" . WPSC_TABLE_CHECKOUT_FORMS . "` WHERE `type` IN ('email') AND `active` = '1' ORDER BY `checkout_order` ASC LIMIT 1");
-      $email            = $wpdb->get_var($wpdb->prepare("SELECT `value` FROM `" . WPSC_TABLE_SUBMITTED_FORM_DATA . "` WHERE `log_id` = %d AND `form_id` = %d LIMIT 1", $purchase_log['id'], $email_form_field));
-
-      // get cart contents
-      $sql           = "SELECT * FROM `" . WPSC_TABLE_CART_CONTENTS . "` WHERE `purchaseid`=" . $purchase_log['id'];
-      $cart_contents = $wpdb->get_results($sql, ARRAY_A);
-
+      $purchase_log = $wpdb->get_row("SELECT * FROM `" .WPSC_TABLE_PURCHASE_LOGS. "` WHERE `id`= " . $orderNo. " LIMIT 1", ARRAY_A);
 
       // Call Jeeb
-      if (get_option("network") == "Testnet")
-      {
-          $network_uri = "http://test.jeeb.io:9876/";
-      }
-      else
-      {
-          $network_uri = "https://jeeb.io/";
-      }
-
-
-      debug_log("Entered Jeeb-Notification");
+      $network_uri = "https://core.jeeb.io/api/";
       if ( $json['stateId']== 2 ) {
-        debug_log('Order Id received = '.$json['orderNo'].' stateId = '.$json['stateId']);
 
-        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `notes`= 'Invoice created.' WHERE `sessionid`=" . $row[0]['sessionid'];
+        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `notes`= 'Invoice created.' WHERE `id`=". $orderNo;
         $wpdb->query($sql);
 
 
-        transaction_results($row[0]['sessionid'], false);
+        transaction_results($purchase_log['sessionid'], false);
       }
       else if ( $json['stateId']== 3 ) {
-        debug_log('Order Id received = '.$json['orderNo'].' stateId = '.$json['stateId']);
-        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `processed`= '2' WHERE `sessionid`=" . $row[0]['sessionid'];
+        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `processed`= '2' WHERE `id`=". $orderNo;
         $wpdb->query($sql);
 
-        $message  = 'Thank you! Your payment has been received, but the transaction has not been confirmed on the bitcoin network. You will receive another email when the transaction has been confirmed.';
-
-        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `notes`= 'The payment has been received, but the transaction has not been confirmed on the bitcoin network. This will be updated when the transaction has been confirmed.' WHERE `sessionid`=" . $row[0]["sessionid"];
+        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `notes`= 'The payment has been received, but the transaction has not been confirmed on the blockchain network. This will be updated when the transaction has been confirmed.' WHERE `id`=". $orderNo;
         $wpdb->query($sql);
 
-        if (wp_mail($email, 'Payment Received', $message)) {
-            $mail_sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `email_sent`= '1' WHERE `sessionid`=" . $row[0]['sessionid'];
-            $wpdb->query($mail_sql);
-        }
+        $wpsc_cart->empty_cart();
 
-        transaction_results($row[0]['sessionid'], false);
+        transaction_results($purchase_log['sessionid'], false);
       }
       else if ( $json['stateId']== 4 ) {
-        debug_log('Order Id received = '.$json['orderNo'].' stateId = '.$json['stateId']);
         $data = array(
           "token" => $json["token"]
         );
 
         $data_string = json_encode($data);
         $api_key = get_option("signature");
-        $url = $network_uri.'api/bitcoin/confirm/'.$api_key;
+        $url = $network_uri.'payments/' . $api_key . '/confirm';
         debug_log("Signature:".$api_key." Base-Url:".$network_uri." Url:".$url);
 
         $ch = curl_init($url);
@@ -383,56 +401,46 @@ function jeeb_callback()
 
         if($data['result']['isConfirmed']){
           debug_log('Payment confirmed by jeeb');
-          $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `processed`= '3' WHERE `sessionid`=" . $row[0]['sessionid'];
+          $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `processed`= '3' WHERE `id`=". $orderNo;
           $wpdb->query($sql);
 
-          $message  = 'Thank you! Your payment has been confirmed by Jeeb';
-
-          $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `notes`= 'The payment has been confirmed by Jeeb. You are now safe to deliver the order.' WHERE `sessionid`=" . $row[0]["sessionid"];
+          $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `notes`= 'The payment has been confirmed by Jeeb. You are now safe to deliver the order.' WHERE `id`=". $orderNo;
           $wpdb->query($sql);
 
-          if (wp_mail($email, 'Payment Confirmed', $message)) {
-              $mail_sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `email_sent`= '1' WHERE `sessionid`=" . $row[0]['sessionid'];
-              $wpdb->query($mail_sql);
-          }
-          $wpsc_cart->empty_cart();
-          transaction_results($row[0]["sessionid"], false);
+          transaction_results($purchase_log['sessionid'], false);
         }
         else {
           debug_log('Payment rejected by jeeb');
         }
       }
       else if ( $json['stateId']== 5 ) {
-        debug_log('Order Id received = '.$json['orderNo'].' stateId = '.$json['stateId']);
-        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `processed`= '5' WHERE `sessionid`=" . $row[0]['sessionid'];
+        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `processed`= '5' WHERE `id`=". $orderNo;
         $wpdb->query($sql);
 
-        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `notes`= 'Invoice was expired and the transaction failed.' WHERE `sessionid`=" . $row[0]["sessionid"];
+        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `notes`= 'Invoice was expired and the transaction failed.' WHERE `id`=". $orderNo;
         $wpdb->query($sql);
 
-        transaction_results($row[0]["sessionid"], false);
+        transaction_results($purchase_log['sessionid'], false);
 
       }
       else if ( $json['stateId']== 6 ) {
-        debug_log('Order Id received = '.$json['orderNo'].' stateId = '.$json['stateId']);
-        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `processed`= '5' WHERE `sessionid`=" . $row[0]['sessionid'];
+        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `processed`= '5' WHERE `id`=". $orderNo;
         $wpdb->query($sql);
 
-        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `notes`= 'Invoice was over paid and the transaction was rejected by Jeeb' WHERE `sessionid`=" . $row[0]["sessionid"];
+        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `notes`= 'Invoice was over paid and the transaction was rejected by Jeeb' WHERE `id`=". $orderNo;
         $wpdb->query($sql);
 
-        transaction_results($row[0]["sessionid"], false);
+        transaction_results($purchase_log['sessionid'], false);
 
       }
       else if ( $json['stateId']== 7 ) {
-        debug_log('Order Id received = '.$json['orderNo'].' stateId = '.$json['stateId']);
-        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `processed`= '5' WHERE `sessionid`=" . $row[0]['sessionid'];
+        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `processed`= '5' WHERE `id`=". $orderNo;
         $wpdb->query($sql);
 
-        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `notes`= 'Invoice was partially paid and the transaction was rejected by Jeeb' WHERE `sessionid`=" . $row[0]["sessionid"];
+        $sql = "UPDATE `" . WPSC_TABLE_PURCHASE_LOGS . "` SET `notes`= 'Invoice was partially paid and the transaction was rejected by Jeeb' WHERE `id`=". $orderNo;
         $wpdb->query($sql);
 
-        transaction_results($row[0]["sessionid"], false);
+        transaction_results($purchase_log['sessionid'], false);
       }
       else{
         debug_log('Cannot read state id sent by Jeeb');
