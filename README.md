@@ -31,7 +31,7 @@ Copy the files inside the folder to your_site/wp-content/plugins/wp-e-commerce/w
 
 * Check the Jeeb payment option to activate it and click Save Changes below.
 
-* Click Settings below the BitPay payment option.
+* Click Settings below the Jeeb payment option.
 
 * Edit Display Name if desired.
 
