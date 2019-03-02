@@ -87,14 +87,15 @@ function form_jeeb()
             '<p class="description">Signature is a unique string provided by Jeeb to the merchant.</p>',
         );
 
-        $btc = $eur = $irr = $usd = "";
+        $btc = $eur = $irr = $usd = $toman = "";
         get_option("basecoin") == "btc" ? $btc = "selected" : $btc = "" ;
         get_option("basecoin") == "eur" ? $eur = "selected" : $eur = "" ;
         get_option("basecoin") == "irr" ? $irr = "selected" : $irr = "" ;
+        get_option("basecoin") == "toman" ? $toman = "selected" : $toman = "" ;
         get_option("basecoin") == "usd" ? $usd = "selected" : $usd = "" ;
         $rows[] = array(
             'Basecoin',
-            '<select name="basecoin"><option value="btc" '.$btc.'>BTC</option><option value="eur" '.$eur.'>EUR</option><option value="irr" '.$irr.'>IRR</option><option value="usd" '.$usd.'>USD</option></select>',
+            '<select name="basecoin"><option value="btc" '.$btc.'>BTC</option><option value="eur" '.$eur.'>EUR</option><option value="irr" '.$irr.'>IRR</option><option value="toman" '.$toman.'>TOMAN</option><option value="usd" '.$usd.'>USD</option></select>',
             '<p class="description">The base currency of your website.</p>',
         );
 
@@ -311,6 +312,11 @@ function gateway_jeeb($seperator, $sessionid)
         }
 
         debug_log("Session Id => " . $sessionid . " " . $purchase_log['id']);
+
+        if($baseCur=='toman'){
+          $baseCur='irr';
+          $order_total *= 10;
+        }
 
         $amount = convertBaseToTarget($baseUri, $order_total, $signature, $baseCur);
 
